@@ -53,3 +53,10 @@
 
 - *vulnerability*: a buffer overflow can happen when the request path (after URL decoded ) is longer than the length of `regpath` (4096 bytes), this is possible because the maximum length of each line can get to 8192 bytes (the size of `env`), and there isn't any size check when invoking `url_decode(reqpath, sq1)` inside `http_request_line(fd, reqpath, env, &env_len)`
     - the chain of function calls: `process_client()`, `http_request_line()`, `url_decode()`
+
+- Now we can start developing exploits. The provided `~/lab/exploit-template.py` issues an HTTP request, it takes 2 arguments, the server name and port number, we can run it in this way: 
+    ```
+    $ ./clean-env.sh ./zookd-exstack 8080 & <-- starts the server in the backgroud
+    $ ./exploit-template.py localhost 8080
+    ```
+- `gdb` is useful in building our exploits, we can attach it to an already-running process with `gdb -p $(pgrep zookd-)`. By default, `gdb` continues to debug parent process and does not attach to the child when the process forks. We can using the command `set follow-fork-mode child` to attach `gdb` to the child process, we can add it to `~/lab/.gdbinit`
