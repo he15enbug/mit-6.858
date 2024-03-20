@@ -111,4 +111,22 @@
     ```
 
 - Then, we need to know the address of the buffer `reqpath` (in `process_client()`), as well as the `rbp` of the stack frame of `process_client()`
+    1. In `/home/student/lab`, run `gdb -p $(pgrep zook-)`
+    2. Set a breakpoint at `process_client()`
+    3. Send any request to the server to trigger the breakpoint
+    4. Inside `process_client()`, run a few instructions to ensure the `rbp` of the current frame is set
+    5. Check the address of `reqpath`, and `rbp` (return address is stored at `rbp+8`)
+        ```
+        (gdb) p/x &reqpath
+        $2 = 0x7fffffffdca0
+        (gdb) p/x $rbp
+        $3 = 0x7fffffffecb0
+        ``` 
 - Finally, we can construct our payload, to overwrite the return address of `process_client()` to redirect the execution to our shellcode
+    - My payload is constructed as (`reqpath` is `/[PAYLOAD]`)
+        - `low <-- [shellcode | 0x90 ... | return address (0x7fffffffdca1)] --> high`
+- My solution cannot be directly used for submission, because some file names are different (e.g., my shellcode bytes are stored in `shellcode-raw`, not `shellcode.bin`)
+- One thing important is that there cannot be any zero bytes (`0x00`) in our payload, otherwise, the content after that will be ignored, and the server cannot parse our request correctly
+
+## Part 3: Return-to-libc attacks
+- this is to defeat the non-executable stack countermeasure
