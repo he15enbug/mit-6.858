@@ -52,7 +52,7 @@
         - URL decodes the content in `src` and store the result in `dst`
 
 - *vulnerability*: a buffer overflow can happen when the request path (after URL decoded ) is longer than the length of `regpath` (4096 bytes), this is possible because the maximum length of each line can get to 8192 bytes (the size of `env`), and there isn't any size check when invoking `url_decode(reqpath, sq1)` inside `http_request_line(fd, reqpath, env, &env_len)`
-    - the chain of function calls: `process_client()`, `http_request_line()`, `url_decode()`
+    - The chain of function calls: `process_client()`, `http_request_line()`, `url_decode()`
 
 - Now we can start developing exploits. The provided `~/lab/exploit-template.py` issues an HTTP request, it takes 2 arguments, the server name and port number, we can run it in this way: 
     ```
@@ -84,3 +84,31 @@
     ```
 
 ## Part 2: Code injection
+- Exploit the vulnerability to inject shellcode to the server to remove a file `/home/student/grades.txt`
+- First, we can develope a program that removes this file, to do this, we just need a system call `execve("/bin/rm", {"rm", "/home/student/grades.txt", NULL}, {NULL})`, we can store these parameters on the stack. When passing parameters to the system call, the first parameter (`rdi`) is `[rsp+56]`, the second (`rsi`) is `[rsp]`, the third (`rdx`) is `0x0` (`NULL`)
+    ```
+    +--------------------------+ High address
+    |           ...            |
+    |--------------------------|
+    |       "/bin/rm\0"        |
+    |--------------------------| <-- rsp+56
+    |     0x0000000000000000   |
+    |--------------------------| <-- rsp+48
+    |        "ades.txt"        |
+    |--------------------------| <-- rsp+40
+    |        "udent/gr"        |
+    |--------------------------| <-- rsp+32
+    |        "/home/st"        |
+    |--------------------------| <-- rsp+24
+    |     0x0000000000000000   |
+    |--------------------------| <-- rsp+16
+    |          rsp+24          | (address of "/home/student/grades.txt")
+    |--------------------------| <-- rsp+8
+    |          rsp+61          | (address of "rm")
+    |--------------------------| <-- rsp
+    |           ...            |
+    +--------------------------+ Low address
+    ```
+
+- Then, we need to know the address of the buffer `reqpath` (in `process_client()`), as well as the `rbp` of the stack frame of `process_client()`
+- Finally, we can construct our payload, to overwrite the return address of `process_client()` to redirect the execution to our shellcode
