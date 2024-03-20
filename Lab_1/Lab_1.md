@@ -35,10 +35,10 @@
         4. Invokes `env_deserialize(env, sizeof(env))`
         5. Invokes `http_request_headers(fd)`, it reads the rest of the request and parse the HTTP headers
 - `http.c`
-    1. `int http_read_line(int fd, char *buf, size_t size)`
+    1. `http_read_line(int fd, char *buf, size_t size)`
         - Reads the HTTTP request from the client FD byte by byte, until it sees the first `\n` or `\r`, i.e., it reads one line of the request
-    2. `const char *http_request_line(int fd, char *reqpath, char *env, size_t *env_len)`
-        - Invokes the previous `http_read_line()`, but converts the returned integer to error information if there is an error
+    2. `http_request_line(int fd, char *reqpath, char *env, size_t *env_len)`
+        - Invokes `http_read_line()`, but converts the returned integer to error information if there is an error
         - Parses request like `GET /foo.html?a=1 HTTP/1.0` (only support `GET` and `POST`)
         - Finally stores the URL decoded request path (e.g., `/foo.html`) in `reqpath`, store some environment variables (e.g., `REQUEST_METHOD=GET\0SERVER_PROTOCOL=HTTP/1.0\0QUERY_STRING=a=1\0REQUEST_URI=/foo.html\0SERVER_NAME=zoobar.org`) in `env`
     2. `const char *http_request_headers(int fd)`
@@ -129,4 +129,40 @@
 - One thing important is that there cannot be any zero bytes (`0x00`) in our payload, otherwise, the content after that will be ignored, and the server cannot parse our request correctly
 
 ## Part 3: Return-to-libc attacks
-- this is to defeat the non-executable stack countermeasure
+- This is to defeat the non-executable stack countermeasure
+- An obstacle to perform the return-to-libc attacks in this lab is that in x86-64 calling conventions, the first 6 arguments of a function are passed in registers (`rdi`, `rsi`, `rdx`, `rcx`, `r8`, and `r9`), so we cannot simply push the parameters on the stack
+- A piece of code in the server that loads an address into `rdi` is referred to as a *borrowed code chunk*, or an *ROP gadget*
+- In the server code, there is an `accidentally()` that helps us to load an argument to `rdi`, so we can overwrite the orginal return address of `process_client()` to the address of `accidentally()` in the memory, and the 8 bytes next (higher) to the return address is the address of a chosen libc function (we can use `system()`), and the next 8 bytes are the parameter to it. Here is the layout of the stack (after the buffer overflow)
+    ```
+    +--------------------------+ High address
+    |           ...            |
+    |--------------------------|
+    |       command string     |
+    |--------------------------| <-- rbp+32
+    |   parameter of system()  |
+    |--------------------------| <-- rbp+24
+    |    address of system()   |
+    |--------------------------| <-- rbp+16
+    | address of accidentally()|
+    |--------------------------| <-- rbp+8
+    |           ...            |
+    +--------------------------+ Low address
+    ```
+- This is the assembly code of `accidentally()` in memory
+    ```
+    0x555555556b8c <accidentally>:       endbr64 
+    0x555555556b90 <accidentally+4>:     push   %rbp
+    0x555555556b91 <accidentally+5>:     mov    %rsp,%rbp
+    0x555555556b94 <accidentally+8>:     mov    0x10(%rbp),%rdi
+    0x555555556b98 <accidentally+12>:    nop
+    0x555555556b99 <accidentally+13>:    pop    %rbp
+    0x555555556b9a <accidentally+14>:    ret 
+    ```
+- The address of libc function `system()`
+    ```
+    (gdb) p &system
+    $4 = (int (*)(const char *)) 0x15555533cae0 <__libc_system>
+    ```
+- The parameter of `system()` is a string. We would like it to run `/bin/rm /home/student/grades.txt`, so we also need to put `b'/bin/rm /home/student/grades.txt\0'` somewhere in our payload. One thing we need to pay attention to is that in 64-bit systems, the highest 2 bytes of the addresses are always zero bytes, if we directly send b'\x00' in our request path, it will be interpreted as end character, and the content after that will be ignored. So, we have to URL encode our payload (in previous parts, I intentionally avoided using any zero byte in my payload, so I didn't URL encode my payload)
+
+- *Challenge*: what if we don't have this `accidentally()` function? We need to find other ROP gadget that load content on the stack to `rdi`
