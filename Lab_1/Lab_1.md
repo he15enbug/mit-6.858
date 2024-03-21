@@ -225,3 +225,7 @@
         ```
 
 ## Part 4: Fixing buffer overflows and other bugs
+- To fix the buffer overflow vulnerability at the first place, we only need to pass the max length of `reqpath` to the `url_decode()` function. Besides, `char value[512]` in `http_request_headers()` can also be overflowed, so when we call `url_decode()` here, we need to pass `512` as the max length of `value`
+    - `const char *http_request_line(int fd, char *reqpath, size_t reqpath_len, char *env, size_t *env_len);`
+    - `void url_decode(char *dst, const char *src, size_t max_len);`
+- I tested the modified code, attacks in previous parts no longer worked

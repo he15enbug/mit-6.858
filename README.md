@@ -3,7 +3,7 @@
 ### Part 1: Finding buffer overflows **[done]**
 ### Part 2: Code injection **[done]**
 ### Part 3: Return-to-libc attacks **[done]**
-### Part 4: Fixing buffer overflows and other bugs
+### Part 4: Fixing buffer overflows and other bugs **[done]**
 ## Lab 2: Privilege Separation
 ## Lab 3: Symbolic Execution
 ## Lab 4: Browser Security
