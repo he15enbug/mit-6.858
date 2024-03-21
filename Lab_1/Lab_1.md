@@ -165,4 +165,63 @@
     ```
 - The parameter of `system()` is a string. We would like it to run `/bin/rm /home/student/grades.txt`, so we also need to put `b'/bin/rm /home/student/grades.txt\0'` somewhere in our payload. One thing we need to pay attention to is that in 64-bit systems, the highest 2 bytes of the addresses are always zero bytes, if we directly send b'\x00' in our request path, it will be interpreted as end character, and the content after that will be ignored. So, we have to URL encode our payload (in previous parts, I intentionally avoided using any zero byte in my payload, so I didn't URL encode my payload)
 
-- *Challenge*: what if we don't have this `accidentally()` function? We need to find other ROP gadget that load content on the stack to `rdi`
+- *Challenge*: what if we don't have this `accidentally()` function? We need to find other ROP gadget that load content on the stack to `rdi`. We can use [`ROPgadget`](https://github.com/JonathanSalwan/ROPgadget), a tool that can assist us in searching for ROP gadgets and is pre-installed in the course VM
+    - Get the address of the libraries that `zookd` loads at runtime
+        ```
+        $ ulimit -s unlimited && setarch -R ldd zookd-nxstack
+        linux-vdso.so.1 (0x000015555551d000)
+        libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00001555552da000)
+        /lib64/ld-linux-x86-64.so.2 (0x000015555551f000)
+        ```
+    - First, try to look for `pop rdi` and then `ret`, i.e., look for 2 consecutive bytes `5F C3`, we can try in these libraries or in `zookd-nxstack` itself. I found some in `/lib64/ld-linux-x86-64.so.2`
+        ```
+        $ ROPgadget --binary /lib64/ld-linux-x86-64.so.2 --opcode "5fc3"
+        Opcodes information
+        ============================================================
+        0x0000000000002538 : 5fc3
+        ...
+        ```
+    - To verify the result, we can use `gdb` to debug `zookd-nxstack`, and check the instructions from `0x0000155555521538` (`0x000015555551f000 + 0x2538`)
+        ```
+        (gdb) x/16i 0x0000155555521538
+        0x155555521538 <handle_preload_list+264>:    pop    %rdi
+        0x155555521539 <handle_preload_list+265>:    ret 
+        ```
+    - Construct the payload: it is a little bit different from the payload of the previous task, because `accidentally()` pushes `rbp` to the stack, while in this task, there is no such action, we need to ensure that when we return to the ROP gadget, the `rsp` points right to the parameter of `unlink()`. The following is the stack layout when the buffer overflows
+        ```
+        +--------------------------+ High address
+        |           ...            |
+        |--------------------------|
+        |         file path        |
+        |--------------------------| <-- rbp+32
+        |    address of unlink()   |
+        |--------------------------| <-- rbp+24
+        |   parameter of unlink()  |
+        |--------------------------| <-- rbp+16
+        |   address of ROP gadget  | (`0x0000155555521538`)
+        |--------------------------| <-- rbp+8
+        |           ...            |
+        +--------------------------+ Low address
+        ```
+    - I used `unlink("/home/student/grades.txt")` because when I tried `system("/bin/rm /home/student/grades.txt")`, it didn't work, although at the moment we successfully reach to the `system()`, the value of `rdi` is correct, but the execution failed somewhere inside `system()`, I am still debugging the program to figure out the problem. As an alternative solution, I just modified the second address to the address of `unlink()`, and modify the string to the file's path, and then I succeeded to delete the file
+
+    - Problem with `system()`: by debugging the program, I found that the program crashed when executing this instruction: `<do_system+355>: movaps %xmm0,0x50(%rsp)`. The `rsp` is `0x7fffffffe938`, the problem might be that `rsp` is not aligned to 16-byte boundary. When I manually `set $rsp=0x7fffffffe930`, the program will not crash, although the file can still not be removed. Maybe before entering `system()`, I can borrow the `ret` in `/lib64/ld-linux-x86-64.so.2` again to pop 8 bytes from the stack, and make `rsp`'s value multiple of 16. The address of `ret` is `0x0000155555521539`. By testing, this is a valid solution. Here is the stack layout (at the time the buffer overflows)
+        ```
+        +--------------------------+ High address
+        |           ...            |
+        |--------------------------|
+        |         file path        |
+        |--------------------------| <-- rbp+40
+        |    address of system()   |
+        |--------------------------| <-- rbp+32
+        |   parameter of system()  |
+        |--------------------------| <-- rbp+24
+        |  address of ROP gadget2  | (0x0000155555521539)
+        |--------------------------| <-- rbp+16
+        |  address of ROP gadget1  | (0x0000155555521538)
+        |--------------------------| <-- rbp+8
+        |           ...            |
+        +--------------------------+ Low address
+        ```
+
+## Part 4: Fixing buffer overflows and other bugs
