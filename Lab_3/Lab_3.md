@@ -206,3 +206,43 @@
     - **The current path condition**: when the application executes and makes control flow decisions based on the value of a concolic value, the constraint representing that branch is appended to the `cur_path_constr` list. In order to generate inputs that make a different decision at a point along the path, the required constraint is the union of the constraints before that point in the path, plus the negation of the constraint at that point. To help with debugging and search heuristics, information about the line of code that triggered each branch is added to the `cur_path_constr_callers` list
 - *Exercise 2*: Finish the implementation of `concolic_int` by adding support for integer multiply and divide operations. We will need to overload additional methods in the `concolic_int` class, add AST nodes for multiply and divide operations, and implement `_z3expr` appropriately for those AST nodes
     - Run `./check-concolic-int.py` or `make check` to check that our changes to `concolic_int` work correctly
+        ```
+        $ ./check-concolic-int.py 
+        Multiply works
+        Divide works
+        Divide+multiply+add works
+        ```
+    - Code
+        ```
+        # AST nodes for multiplication and division
+        class sym_division(sym_binop):
+            def _z3expr(self):
+                return z3expr(self.a) / z3expr(self.b)
+        class sym_multiply(sym_binop):
+            def _z3expr(self):
+                return z3expr(self.a) * z3expr(self.b)
+        ```
+        ```
+        # overload __mul__, __rmul__, __floordiv__, and __rfloordiv__
+        def __mul__(self, o):
+            if isinstance(o, concolic_int):
+                res = self.__v * o.__v
+            else:
+                res = self.__v * o
+            return concolic_int(sym_multiply(ast(self), ast(o)), res)
+
+        def __rmul__(self, o):
+            res = o * self.__v
+            return concolic_int(sym_multiply(ast(o), ast(self)), res)
+
+        def __floordiv__(self, o):
+            if isinstance(o, concolic_int):
+                res = self.__v // o.__v
+            else:
+                res = self.__v // o
+            return concolic_int(sym_division(ast(self), ast(o)), res)
+
+        def __rfloordiv__(o, self):
+            res = o // self.__v
+            return concolic_int(sym_division(ast(o), ast(self)), res)
+        ```
