@@ -410,3 +410,66 @@
         Found all cases for f
         ```
 ## Concolic execution for strings and Zoobar
+- Before we can run the entire Zoobar application through our concolic system, we have to first add support for strings
+- *Exercise 7*: finish the implementation of concolic execution for strings and byte-arrays in `fuzzy.py`. Specifically, we need to implement two operations on `concolic_str` and `concolic_bytes`. The first is computing the length of a string, and the second is checking whether a particular string `a` appears in string `b`
+    ```
+    (concolic_str)
+    def __len__(self):
+        return concolic_int(sym_length(ast(self)), len(self.__v))
+
+    def __contains__(self, o):
+        if(isinstance(o, concolic_str)):
+            res = (o.__v in self.__v)
+        else:
+            res = o in self.__v
+        return concolic_bool(sym_contains(ast(self), ast(o)), res)
+    ...
+    (concolic_bytes)
+    def __len__(self):
+        return concolic_int(sym_length(ast(self)), len(self.__v))
+
+    def __contains__(self, o):
+        if(isinstance(o, concolic_bytes)):
+            res = (o.__v in self.__v)
+        else:
+            res = o in self.__v
+        return concolic_bool(sym_contains(ast(self), ast(o)), res)
+    ```
+    - Test
+        ```
+        $ make check
+        ...
+        PASS Exercise 7: concolic length
+        PASS Exercise 7: concolic contains
+        PASS Exercise 7: concolic execution for strings
+        ...
+        ```
+- In addition to performing string operations, Zoobar's application code makes database queries (e.g., looking up a user's `Profile` object from the profile database). Our plan is to supply a concolic HTTP request to Zoobar, so the username being looked up is going to be a concolic value as well (coming through the HTTP cookie). But how can we perform SQL queries on a concolic value? We would like to allow the concolic execution system to somehow explore all possible records that it could fetch from the database, but the SQL query goes into SQLite's code which is written in C, not Python, so we cannot interpose on that code
+- *Exercise 8*: Figure out how to handle the SQL database so that the concolic engine can create constraints against the data returned by the database. There is an empty wrapper around the sqlalchemy `get` method in `symex/symsql.py`. Implement this wrapper so that concolic execution can try all possible records in a database
+    - To understand what the behavior of `get` should be and what our replacement implementation should be doing by consulting the reference for the [SQLalchemy query object](https://docs.sqlalchemy.org/en/11/orm/query.html)
+    - Modify `symsql.py`: we use `all()` method to fetch all rows from the database, and compare the value of each row's primary key to the concolic string or integer in `newget()`'s parameter
+        ```
+        def newget(query, primary_key):
+            rows = query.all()
+            for row in rows:
+                pk_name = row.__table__.primary_key.columns.keys()[0]
+                if(getattr(row, pk_name) == primary_key):
+                    return row
+            return None
+        ```
+    - Test
+        ```
+        $ make check
+        ...
+        PASS Exercise 8: concolic database lookup (str)
+        PASS Exercise 8: concolic database lookup (int)
+        ...
+        ```
+- Now we can perform concolic execution for strings and even database queries, we can finally try running Zoobar under concolic execution. Take a look at the `check-symex-zoobar.py` program to see how we can invoke Zoobar on symbolic inputs. To make sure that concolic execution of Zoobar finishes relatively quickly, we over-constrain the initial inputs to Zoobar. In particular, we specify that the HTTP method (in `environ['REQUEST_METHOD']`) is always `GET`, and that the URL requested (in `environ['PATH_INFO']`) always starts with `trans`. This greatly cuts down the number of possible path that concolic execution must explore; making these inputs arbitrary leads to about 2000 paths that must be explored, which takes about 10 minutes
+- Try running `check-symex-zoobar.py` to make sure that all of the code we've implemented so far in this lab works properly. To save the output in the `typescript` file for later inspection, run it inside of `script`: `script -c ./check-symex-zoobar.py`
+    ```
+    $ script -c ./check-symex-zoobar.py
+    ...
+    Stopping after 142 iterations
+    Script done.
+    ```
