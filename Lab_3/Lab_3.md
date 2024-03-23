@@ -246,3 +246,112 @@
             res = o // self.__v
             return concolic_int(sym_division(ast(o), ast(self)), res)
         ```
+- *Exercise 3*: an important component of concolic execution is `concolic_exec_input()` in `fuzzy.py`. The implementation is given, we will use it to build a complete concolic execution system. To understand how to use `concolic_exec_input()`, we should create an input such that we pass the first check in `symex/check-symex-int.py`
+    - The first test's code is as follows, we need to provide an input such that `test_f()` returns `1234`, the input should be `'i': 861`
+        ```
+        def f(x):
+            if x == 7:
+                return 100
+            if x*2 == x+1:
+                return 70
+            if x > 2000:
+                return 80
+            if x*2 == 1000:
+                return 30000
+            if x < 500:
+                return 33
+            if x // 123 == 7:
+                return 1234
+            return 40
+
+        def test_f():
+            i = fuzzy.mk_int('i', 0)
+            v = f(i)
+            return v
+        v = symex_exercises.make_a_test_case()
+        (r, constr, callers) = fuzzy.concolic_exec_input(test_f, v, verbose=1)
+        if r == 1234:
+            print("Found input for 1234")
+        else:
+            print("Input produced", r, "instead of 1234")
+        ```
+    - Modify `symex-exercises.py`
+        ```
+        def make_a_test_case():
+            concrete_values = fuzzy.ConcreteValues()
+            ## Your solution here: add the right value to concrete_values
+            concrete_values.add('i', 861)
+            return concrete_values
+        ```
+    - Run `./check-symex-int.py` or `make check` to check our solution. We only care about the first check in `check-symex-int.py`
+        ```
+        $ ./check-symex-int.py 
+        Calling f with a specific input..
+        Trying concrete value: {'i': 861}
+        Found input for 1234
+        ...
+        ```
+- *Exercise 4*: another major component in concolic execution is finding a concrete input for a constraint. Complete the implementation of `concolic_find_input` in `fuzzy.py`, and make sure we pass the second test case of `check-symex-int.py`
+    - Modify `fuzzy.py`
+        ```
+        def concolic_find_input(constraint, ok_names, verbose=0):
+            (ok, model) = fork_and_check(constraint)
+            if(ok == z3.sat):
+                v = ConcreteValues()
+                for name, val in model.items():
+                    if(name in ok_names):
+                        v.add(name, val)
+                return True, v
+            return False, ConcreteValues()
+        ```
+    - Test
+        ```
+        $ make check
+        ...
+        PASS Exercise 4: concolic_find_input constr2
+        PASS Exercise 4: concolic_find_input constr3
+        ...
+        ```
+- *Exercise 5*: A final major component in concolic execution is exploring different branches of execution. Complete the implementation of `concolic_force_branch` in `fuzzy.py`, and pass the final test case of `check-symex-int.py`
+    ```
+    def concolic_force_branch(b, branch_conds, branch_callers, verbose = 1):
+        ## Compute an AST expression for the constraints necessary
+        ## to go the other way on branch b.  You can use existing
+        ## logical AST combinators like sym_not(), sym_and(), etc.
+        ##
+        ## Note that some of the AST combinators take separate positional
+        ## arguments. In Python, to unpack a list into separate positional
+        ## arguments, use the '*' operator documented at
+        ## https://docs.python.org/3/tutorial/controlflow.html#unpacking-argument-lists
+
+        constraint = None
+
+        for i in range(0, b):
+            if(constraint == None):
+            constraint = branch_conds[i]
+            else:
+            constraint = sym_and(constraint, branch_conds[i])
+        if(constraint == None):
+            constraint = sym_not(branch_conds[b])
+        else:
+            constraint = sym_and(constraint, sym_not(branch_conds[b]))
+
+        if verbose > 2:
+            callers = branch_callers[b]
+            print('Trying to branch at %s:%d:' % (callers[0], callers[1]))
+            if constraint is not None:
+            print(indent(z3expr(constraint).sexpr()))
+
+        if constraint is None:
+            return const_bool(True)
+        else:
+            return constraint
+    ```
+    - Test
+        ```
+        $ make check
+        ...
+        PASS Exercise 5: concolic_force_branch
+        ...
+        ```
+- *Exercise 6*: 
