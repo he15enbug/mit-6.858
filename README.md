@@ -7,6 +7,7 @@
 ## Lab 2: Privilege Separation
 ## Lab 3: Symbolic Execution
 - Using an SMT solver **[done]**
-- Concolic execution for integers
+- Concolic execution for integers **[done]**
+- Concolic execution for strings and Zoobar
 ## Lab 4: Browser Security
 ## Lab 5: Final Project

@@ -354,4 +354,59 @@
         PASS Exercise 5: concolic_force_branch
         ...
         ```
-- *Exercise 6*: 
+- *Exercise 6*: implement concolic execution of a function in `concolic_execs()` in `fuzzy.py`. The goal is to eventually cause every branch of `func` to be executed
+    ```
+    def concolic_execs(func, maxiter=100, verbose=0):
+
+        checked = set()
+        outs = []
+        inputs = InputQueue()
+        
+        iter = 0
+        while iter < maxiter and not inputs.empty():
+            iter += 1
+            concrete_values = inputs.get()
+            (r, branch_conds, branch_callers) = concolic_exec_input(
+                func, concrete_values, verbose
+            )
+            if r not in outs:
+                outs.append(r)
+
+            for i in range(0, len(branch_conds)):
+                constr = concolic_force_branch(i, branch_conds, branch_callers)
+                if(constr in checked):
+                    continue
+                checked.add(constr)
+                (ok, v) = concolic_find_input(constr, concrete_values.var_names())
+                if(ok == False):
+                    continue
+                v.inherit(concrete_values)
+                inputs.add(v, branch_callers[i])
+
+        if verbose > 0:
+            print("Stopping after", iter, "iterations")
+
+        return outs
+    ```
+    - Test:
+        ```
+        $ ./check-symex-int.py 
+        ...
+        Testing f..
+        Trying concrete value: {}
+        Trying concrete value: {'i': 7}
+        Trying concrete value: {'i': 2001}
+        Trying concrete value: {'i': 1300}
+        Trying concrete value: {'i': 1}
+        Trying concrete value: {'i': 861}
+        Trying concrete value: {'i': 500}
+        Trying concrete value: {'i': 8}
+        Trying concrete value: {'i': 615}
+        Trying concrete value: {'i': 0}
+        Trying concrete value: {'i': 0}
+        Trying concrete value: {'i': 0}
+        Trying concrete value: {'i': 2}
+        Stopping after 13 iterations
+        Found all cases for f
+        ```
+## Concolic execution for strings and Zoobar

@@ -1007,7 +1007,7 @@ def concolic_execs(func, maxiter=100, verbose=0):
 
     ## list of inputs we should try to explore.
     inputs = InputQueue()
-
+    
     iter = 0
     while iter < maxiter and not inputs.empty():
         iter += 1
@@ -1045,6 +1045,17 @@ def concolic_execs(func, maxiter=100, verbose=0):
         ##
         ##   where caller is the corresponding value from the list of call
         ##   sites returned by concolic_find_input (i.e., branch_callers).
+
+        for i in range(0, len(branch_conds)):
+            constr = concolic_force_branch(i, branch_conds, branch_callers)
+            if(constr in checked):
+                continue
+            checked.add(constr)
+            (ok, v) = concolic_find_input(constr, concrete_values.var_names())
+            if(ok == False):
+                continue
+            v.inherit(concrete_values)
+            inputs.add(v, branch_callers[i])
 
     if verbose > 0:
         print("Stopping after", iter, "iterations")
