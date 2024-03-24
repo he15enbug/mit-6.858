@@ -473,3 +473,35 @@
     Stopping after 142 iterations
     Script done.
     ```
+- Since Zoobar is written in Python, there are no memory corruption or crash bugs, so it's not immediately clear how we could tell that there's a problem. As a result, we have to write explicit invariants to catch bad situations indicative of a security problem
+- One such invariant supplied for us is a check for eval injection; that is, arbitrary input being passed to the `eval()` function in Python. Examine `symex/symeval.py` to see how we check for eval injection. We make an approximation that seems reasonable in practice: if the string passed to eval() can ever contain ;badstuff(); somewhere in the string, it's a good bet that we have an eval injection vulnerability. Since the `eval` implementations is writen in Python, the check `;badstuff();` in `expr` invokes our overloaded method in `concolic_str`, and this tells the concolic execution system to try to construct an input that contains that substring
+- We can see whether Zoobar contains such bugs by looking for the string printed by the check in `symeval.py` in the output from `check-symex-zoobar.py`
+    ```
+    $ grep "Exception: eval injection" typescript
+    Exception: eval injection
+    Exception: eval injection
+    ```
+- We can look at the lines just before that message to see what concrete input triggers eval injection
+- Our job will be to implement two additional invariant checks to see whether Zoobar balances can ever be corrupted. In particular, we want to enforce two guarantees
+    1. If no new users are registered, the sum of Zoobar balances in all accounts should remain the same before and after every request. (That is, zoobars should never be created out of thin air.)
+    2. If a user `u` does not issue any requests to Zoobar, `u`'s Zoobar balance should not shrink. (That is, it should be impossible to for requests by one user to steal another user's zoobars.)
+- *Exercise 9*: add invariant checks to `check-symex-zoobar.py` to implement the above two rules (total balance preservation and no zoobar theft)
+    - Balance mismatch: we need to calculate the sum of zoobars in `pdb` before and after running `zoobar.app()`, if the balance changed, then there is a balance mismatch
+        ```
+        balance1 = sum([p.zoobars for p in pdb.query(zoobar.zoodb.Person).all()])
+        ...
+        balance2 = sum([p.zoobars for p in pdb.query(zoobar.zoodb.Person).all()])
+        if(balance1 != balance2):
+            report_balance_mismatch()
+        ```
+    - Zoobar theft: get all transfer records from `tdb`, and all users from `pdb`, for users not in `tdb`, if their zoobars is less than the initial value (`10`), there is a zoobar theft
+        ```
+        senders = [t.sender for t in tdb.query(zoobar.zoodb.Transfer).all()]
+        users   = [p for p in pdb.query(zoobar.zoodb.Person).all()]
+        for u in users:
+            if(u.username not in senders):
+                if(u.zoobars < 10):
+                    report_zoobar_theft()
+                    break
+        ```
+    - Run `./check-symex-zoobar.py` and check whether the output contains the messages `WARNING: Balance mismatch detected` and `WARNING: Zoobar theft detected`. Or run `make check`
