@@ -10,4 +10,7 @@
 - Concolic execution for integers **[done]**
 - Concolic execution for strings and Zoobar **[done]**
 ## Lab 4: Browser Security
+- Part 1: A cross-site scripting (XSS) attack
+- Part 2: Fake login page
+- Part 3: Profile Worm
 ## Lab 5: Final Project
