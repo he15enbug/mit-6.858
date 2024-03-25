@@ -8,6 +8,6 @@
 ## Lab 3: Symbolic Execution
 - Using an SMT solver **[done]**
 - Concolic execution for integers **[done]**
-- Concolic execution for strings and Zoobar
+- Concolic execution for strings and Zoobar **[done]**
 ## Lab 4: Browser Security
 ## Lab 5: Final Project

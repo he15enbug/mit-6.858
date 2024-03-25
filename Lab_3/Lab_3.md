@@ -505,3 +505,19 @@
                     break
         ```
     - Run `./check-symex-zoobar.py` and check whether the output contains the messages `WARNING: Balance mismatch detected` and `WARNING: Zoobar theft detected`. Or run `make check`
+        ```
+        $ make check
+        ...
+        PASS Exercise 9: balance mismatch found
+        PASS Exercise 9: zoobar theft found
+        ...
+        ```
+- *Exercise 10*: fix these two bugs. Make a copy of files we want to modify from `zoobar` into `zoobar-fixed`
+    - Balance mismatch: users can send one zoobar to themselves, in `bank.py`, `transfer()` will first deduct the sender's balance, and then increase the recipient's balance, and then save the change to the database, the problem is that when the sender and the recipient are the same user, the saving the recipient's balance to the database will overwrite the changes to sender's balance. To fix this, `transfer()` should return immediately when `sender == recipient`
+    - Zoobar theft: Alice can transfer `-1` zoobars to Bob to steal one zoobar from Bob, to fix the bug, we need to check and ensure that the zoobars transferred is greater than zero
+    - Test
+        ```
+        $ make check
+        PASS Exercise 10: balance mismatch not found
+        PASS Exercise 10: zoobar theft not found
+        ```
